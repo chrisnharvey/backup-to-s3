@@ -5,7 +5,7 @@
         "symfony/yaml": "2.0.*",
         "symfony/process": "2.0.*",
         "ulrichsg/getopt-php": "1.0.1",
-        "amazonwebservices/aws-sdk-for-php": "1.5.*"
+        "aws/aws-sdk-php": "^3.39"
     },
     "autoload": {
         "psr-0": { 

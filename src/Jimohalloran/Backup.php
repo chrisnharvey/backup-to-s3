@@ -1,6 +1,8 @@
 <?php
 
 namespace Jimohalloran;
+
+use Aws\S3\S3MultiRegionClient;
 use Symfony\Component\Process\Process;
 
 /**
@@ -56,48 +58,32 @@ class Backup {
 	}
 	
 	protected function _uploadToAmazonS3($awsConfig) {
-		$s3 = new \AmazonS3(array(
-				'key' => $awsConfig['access_key_id'],
+		$s3 = new S3MultiRegionClient([
+			'credentials' => [
+				'key'    => $awsConfig['access_key_id'],
 				'secret' => $awsConfig['secret_access_key'],
-			));
+			],
+			'version' => 'latest'
+		]);
 	
 		$numErrors = 0;
 		$errMsg = '';
 		$success = false;
+		$errors = [];
 		do {
 			try {
-				$response = $s3->create_mpu_object($awsConfig['bucket'], basename($this->_tarball), array(
-						'fileUpload' => $this->_tarball,
-						'acl' => \AmazonS3::ACL_PRIVATE ,
-						'storage' => \AmazonS3::STORAGE_STANDARD,
-						'partSize' => 1 * 1024 * 1024 * 1024,  // 1Gb
-						'limit' => 1,
-					));
-				
-				if ($response instanceof \CFResponse) {
-					$success = $response->isOk();
-				} elseif ($response instanceof \CFArray) {
-					$success = $response->allOk();
-				} else {
-					$success = false;
-					$errMsg = 'Unknown response type';
-				}
-				
-				if (!$success) {
-					throw new BackupException("Error uploading {$this->_tarball} to S3. Exception Message: '$errMsg' Response from Amazon was: ".print_r($response, true));
-				}
-				
-			} catch (\cURL_Exception $e) {
+				$response = $s3->upload($awsConfig['bucket'], basename($this->_tarball), fopen($this->_tarball, 'r+'), 'private');
+				$success = true;
+			} catch (\Exception $e) {
 				$numErrors++;
 				$errMsg = $e->getMessage();
-				echo "$numErrors: $errMsg\n";
-			} catch (\cURL_Multi_Exception $e) {
-				$numErrors++;
-				$errMsg = $e->getMessage();
-				echo "$numErrors: $errMsg\n";
-			}
+				$errors[] = $e;
+        	}
 		} while ($numErrors < 3 && !$success);
 
+		if ($numErrors >= 3 AND ! $success) {
+			throw new BackupException("Error uploading {$this->_tarball} to S3. Exception Message: '$errMsg' Response from Amazon was: ".print_r($errors, true)); 
+		}
 	}
 
     protected function _encryptBackup($gpgKeyId) {
